@@ -10,258 +10,473 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Arial', sans-serif;
             overflow: hidden;
         }
-        
-        .game-container {
+
+        #gameContainer {
             position: relative;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
         }
-        
-        canvas {
+
+        #gameCanvas {
             display: block;
-            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+            background: linear-gradient(180deg, #0f0f23 0%, #1a1a3e 100%);
         }
-        
-        .instructions {
+
+        #score {
             position: absolute;
-            bottom: -40px;
+            top: 20px;
+            right: 20px;
+            color: #fff;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            color: white;
+            color: rgba(255, 255, 255, 0.7);
             font-size: 14px;
             text-align: center;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #00ffff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+
+        #gameOver h2 {
+            color: #ff4444;
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+        }
+
+        #gameOver p {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        #restartBtn {
+            background: linear-gradient(45deg, #00ffff, #00aaee);
+            border: none;
+            padding: 12px 30px;
+            color: #000;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+        }
+
+        #restartBtn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.8);
         }
     </style>
 </head>
 <body>
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div class="instructions">Press SPACE or Click to Jump</div>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+        <div id="score">Score: 0</div>
+        <div id="instructions">Press SPACE or Click to Jump | Avoid Obstacles!</div>
+        <div id="gameOver">
+            <h2>GAME OVER</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button id="restartBtn">Play Again</button>
+        </div>
     </div>
-    
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        
-        // Set canvas size
-        canvas.width = 800;
-        canvas.height = 400;
-        
-        // Physics constants
-        const GRAVITY = 0.6;
-        const JUMP_FORCE = -12;
-        const GROUND_Y = 340;
-        
-        // Game objects
+        const scoreElement = document.getElementById('score');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // Game state
+        let gameRunning = true;
+        let score = 0;
+        let gameSpeed = 6;
+        let frameCount = 0;
+
+        // Player
         const player = {
             x: 150,
-            y: GROUND_Y - 20,
+            y: 350,
             radius: 20,
+            velocity: 0,
+            gravity: 0.6,
+            jumpPower: -12,
             rotation: 0,
-            rotationSpeed: 0.08,
-            velocityY: 0,
-            isJumping: false,
+            onGround: false,
             trail: []
         };
-        
+
+        // Floor
         const floor = {
-            y: GROUND_Y,
-            height: 60
+            y: 400,
+            height: 100,
+            gridOffset: 0
         };
-        
-        // Background particles
-        const particles = [];
-        for (let i = 0; i < 50; i++) {
-            particles.push({
+
+        // Obstacles
+        let obstacles = [];
+
+        // Particles
+        let particles = [];
+
+        // Stars background
+        let stars = [];
+        for (let i = 0; i < 100; i++) {
+            stars.push({
                 x: Math.random() * canvas.width,
-                y: Math.random() * (GROUND_Y - 50),
-                size: Math.random() * 3 + 1,
-                speed: Math.random() * 0.5 + 0.2,
-                opacity: Math.random() * 0.5 + 0.2
+                y: Math.random() * (floor.y - 100),
+                size: Math.random() * 2 + 0.5,
+                speed: Math.random() * 0.5 + 0.1
             });
         }
-        
-        // Draw background particles
-        function drawBackground() {
-            particles.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
-                ctx.fill();
+
+        function createParticle(x, y, type) {
+            const particle = {
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                life: 1,
+                decay: Math.random() * 0.03 + 0.02,
+                color: type === 'jump' ? '#00ffff' : '#ff4444',
+                size: Math.random() * 4 + 2
+            };
+            particles.push(particle);
+        }
+
+        function createObstacle() {
+            const type = Math.random() > 0.5 ? 'spike' : 'block';
+            const obstacle = {
+                x: canvas.width,
+                y: floor.y - (type === 'spike' ? 40 : 50),
+                width: type === 'spike' ? 40 : 50,
+                height: type === 'spike' ? 40 : 50,
+                type: type
+            };
+            obstacles.push(obstacle);
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            frameCount++;
+            
+            // Update score
+            if (frameCount % 10 === 0) {
+                score++;
+                scoreElement.textContent = `Score: ${score}`;
                 
-                p.x -= p.speed;
-                if (p.x < -10) {
-                    p.x = canvas.width + 10;
+                // Increase difficulty
+                if (score % 100 === 0) {
+                    gameSpeed += 0.5;
+                }
+            }
+
+            // Update player physics
+            player.velocity += player.gravity;
+            player.y += player.velocity;
+
+            // Ground collision
+            if (player.y >= floor.y - player.radius) {
+                player.y = floor.y - player.radius;
+                player.velocity = 0;
+                player.onGround = true;
+            } else {
+                player.onGround = false;
+            }
+
+            // Rotation
+            player.rotation += player.onGround ? 0.05 : 0.1;
+
+            // Trail effect
+            if (frameCount % 3 === 0) {
+                player.trail.push({ x: player.x, y: player.y, rotation: player.rotation, alpha: 0.5 });
+                if (player.trail.length > 10) player.trail.shift();
+            }
+
+            // Update floor grid
+            floor.gridOffset -= gameSpeed;
+            if (floor.gridOffset <= -40) floor.gridOffset = 0;
+
+            // Update stars
+            stars.forEach(star => {
+                star.x -= star.speed;
+                if (star.x < 0) star.x = canvas.width;
+            });
+
+            // Update obstacles
+            if (frameCount % 90 === 0) {
+                createObstacle();
+            }
+
+            obstacles.forEach((obstacle, index) => {
+                obstacle.x -= gameSpeed;
+                
+                // Remove off-screen obstacles
+                if (obstacle.x + obstacle.width < 0) {
+                    obstacles.splice(index, 1);
+                }
+
+                // Collision detection
+                if (checkCollision(player, obstacle)) {
+                    gameOver();
+                }
+            });
+
+            // Update particles
+            particles.forEach((particle, index) => {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                particle.life -= particle.decay;
+                particle.vy += 0.2; // gravity
+                
+                if (particle.life <= 0) {
+                    particles.splice(index, 1);
                 }
             });
         }
-        
-        // Draw the floor with gradient and pattern
-        function drawFloor() {
-            // Floor gradient
-            const gradient = ctx.createLinearGradient(0, floor.y, 0, floor.y + floor.height);
-            gradient.addColorStop(0, '#2C3E50');
-            gradient.addColorStop(1, '#1A252F');
-            
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, floor.y, canvas.width, floor.height);
-            
-            // Top border line (thin white outline as requested)
-            ctx.strokeStyle = 'white';
+
+        function checkCollision(player, obstacle) {
+            if (obstacle.type === 'block') {
+                return player.x + player.radius > obstacle.x &&
+                       player.x - player.radius < obstacle.x + obstacle.width &&
+                       player.y + player.radius > obstacle.y &&
+                       player.y - player.radius < obstacle.y + obstacle.height;
+            } else {
+                // Spike collision (triangle)
+                const spikeTop = { x: obstacle.x + obstacle.width / 2, y: obstacle.y };
+                const spikeLeft = { x: obstacle.x, y: obstacle.y + obstacle.height };
+                const spikeRight = { x: obstacle.x + obstacle.width, y: obstacle.y + obstacle.height };
+                
+                // Simple circle-triangle collision
+                const distToTop = Math.sqrt((player.x - spikeTop.x) ** 2 + (player.y - spikeTop.y) ** 2);
+                const distToLeft = Math.sqrt((player.x - spikeLeft.x) ** 2 + (player.y - spikeLeft.y) ** 2);
+                const distToRight = Math.sqrt((player.x - spikeRight.x) ** 2 + (player.y - spikeRight.y) ** 2);
+                
+                return distToTop < player.radius || distToLeft < player.radius || distToRight < player.radius;
+            }
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw stars
+            stars.forEach(star => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.5})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw floor with gradient
+            const floorGradient = ctx.createLinearGradient(0, floor.y, 0, canvas.height);
+            floorGradient.addColorStop(0, '#00ffff');
+            floorGradient.addColorStop(0.3, '#0088ff');
+            floorGradient.addColorStop(1, '#004488');
+            ctx.fillStyle = floorGradient;
+            ctx.fillRect(0, floor.y, canvas.width, canvas.height - floor.y);
+
+            // Draw moving grid on floor
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            for (let x = floor.gridOffset; x < canvas.width; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, floor.y);
+                ctx.lineTo(x - 100, canvas.height);
+                ctx.stroke();
+            }
+
+            // Draw floor top line with glow
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 15;
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(0, floor.y);
             ctx.lineTo(canvas.width, floor.y);
             ctx.stroke();
-            
-            // Add some decorative lines on the floor
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < canvas.width; i += 40) {
+            ctx.shadowBlur = 0;
+
+            // Draw player trail
+            player.trail.forEach((trail, index) => {
+                ctx.save();
+                ctx.translate(trail.x, trail.y);
+                ctx.rotate(trail.rotation);
+                ctx.fillStyle = `rgba(0, 255, 255, ${trail.alpha * 0.3})`;
                 ctx.beginPath();
-                ctx.moveTo(i, floor.y);
-                ctx.lineTo(i - 20, floor.y + floor.height);
-                ctx.stroke();
-            }
-        }
-        
-        // Draw player trail
-        function drawTrail() {
-            player.trail.forEach((pos, index) => {
-                const alpha = index / player.trail.length * 0.5;
-                const size = player.radius * (index / player.trail.length);
-                
-                ctx.beginPath();
-                ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.arc(0, 0, player.radius * (index / player.trail.length), 0, Math.PI * 2);
                 ctx.fill();
-                ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
-                ctx.lineWidth = 1;
-                ctx.stroke();
+                ctx.restore();
             });
-        }
-        
-        // Draw the player (circle)
-        function drawPlayer() {
+
+            // Draw player with glow
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 20;
             ctx.save();
             ctx.translate(player.x, player.y);
             ctx.rotate(player.rotation);
             
-            // White circle with thin black outline
+            // Outer glow
+            const gradient = ctx.createRadialGradient(0, 0, player.radius * 0.5, 0, 0, player.radius * 1.5);
+            gradient.addColorStop(0, 'rgba(0, 255, 255, 0.8)');
+            gradient.addColorStop(1, 'rgba(0, 255, 255, 0)');
+            ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
-            
-            // Add glow effect
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-            ctx.shadowBlur = 10;
-            
-            ctx.fillStyle = 'white';
+            ctx.arc(0, 0, player.radius * 1.5, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            
-            // Add a small inner detail to show rotation better
+            // Main circle
+            ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(8, -8, 4, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Inner detail
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(0, 0, player.radius * 0.6, 0, Math.PI * 2);
             ctx.fill();
             
             ctx.restore();
+            ctx.shadowBlur = 0;
+
+            // Draw obstacles
+            obstacles.forEach(obstacle => {
+                if (obstacle.type === 'block') {
+                    ctx.shadowColor = '#ff4444';
+                    ctx.shadowBlur = 15;
+                    ctx.fillStyle = '#ff4444';
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                    
+                    // Block detail
+                    ctx.fillStyle = '#ff8888';
+                    ctx.fillRect(obstacle.x + 5, obstacle.y + 5, obstacle.width - 10, obstacle.height - 10);
+                } else {
+                    ctx.shadowColor = '#ffaa00';
+                    ctx.shadowBlur = 15;
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.beginPath();
+                    ctx.moveTo(obstacle.x, obstacle.y + obstacle.height);
+                    ctx.lineTo(obstacle.x + obstacle.width / 2, obstacle.y);
+                    ctx.lineTo(obstacle.x + obstacle.width, obstacle.y + obstacle.height);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+            });
+
+            // Draw particles
+            particles.forEach(particle => {
+                ctx.globalAlpha = particle.life;
+                ctx.fillStyle = particle.color;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            });
         }
-        
-        // Update game state
-        function update() {
-            // Apply gravity
-            player.velocityY += GRAVITY;
-            player.y += player.velocityY;
-            
-            // Ground collision
-            if (player.y >= GROUND_Y - player.radius) {
-                player.y = GROUND_Y - player.radius;
-                player.velocityY = 0;
-                player.isJumping = false;
-            } else {
-                player.isJumping = true;
-            }
-            
-            // Rotate the player (faster when jumping)
-            player.rotation += player.rotationSpeed * (player.isJumping ? 1.5 : 1);
-            
-            // Update trail
-            player.trail.push({ x: player.x, y: player.y });
-            if (player.trail.length > 10) {
-                player.trail.shift();
-            }
-        }
-        
-        // Jump function
+
         function jump() {
-            if (!player.isJumping) {
-                player.velocityY = JUMP_FORCE;
-                player.isJumping = true;
+            if (player.onGround && gameRunning) {
+                player.velocity = player.jumpPower;
+                player.onGround = false;
                 
                 // Create jump particles
-                for (let i = 0; i < 5; i++) {
-                    particles.push({
-                        x: player.x,
-                        y: player.y + player.radius,
-                        size: Math.random() * 4 + 2,
-                        speed: (Math.random() - 0.5) * 2,
-                        opacity: 0.8,
-                        velocityY: -Math.random() * 2
-                    });
+                for (let i = 0; i < 8; i++) {
+                    createParticle(player.x, player.y + player.radius, 'jump');
                 }
             }
         }
-        
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreElement.textContent = score;
+            gameOverElement.style.display = 'block';
+            
+            // Create explosion particles
+            for (let i = 0; i < 20; i++) {
+                createParticle(player.x, player.y, 'explosion');
+            }
+        }
+
+        function resetGame() {
+            gameRunning = true;
+            score = 0;
+            gameSpeed = 6;
+            frameCount = 0;
+            player.y = 350;
+            player.velocity = 0;
+            player.rotation = 0;
+            player.trail = [];
+            obstacles = [];
+            particles = [];
+            scoreElement.textContent = 'Score: 0';
+            gameOverElement.style.display = 'none';
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
         // Event listeners
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
                 e.preventDefault();
-                jump();
+                if (gameRunning) {
+                    jump();
+                } else {
+                    resetGame();
+                }
             }
         });
-        
-        canvas.addEventListener('click', jump);
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            jump();
+
+        canvas.addEventListener('click', () => {
+            if (gameRunning) {
+                jump();
+            } else {
+                resetGame();
+            }
         });
-        
-        // Main game loop
-        function gameLoop() {
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw everything
-            drawBackground();
-            drawFloor();
-            drawTrail();
-            drawPlayer();
-            
-            // Update
-            update();
-            
-            // Continue loop
-            requestAnimationFrame(gameLoop);
-        }
-        
-        // Start the game
+
+        restartBtn.addEventListener('click', resetGame);
+
+        // Start game
         gameLoop();
     </script>
 </body>
