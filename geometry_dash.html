@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry Dash Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+        }
+        
+        canvas {
+            border: 2px solid #555;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = 800;
+        canvas.height = 400;
+        
+        // Game objects
+        const player = {
+            x: 100,
+            y: 300,
+            radius: 20,
+            rotation: 0,
+            rotationSpeed: 0.05
+        };
+        
+        const floor = {
+            y: 340,
+            height: 60
+        };
+        
+        // Draw the floor
+        function drawFloor() {
+            // White fill
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, floor.y, canvas.width, floor.height);
+            
+            // Thin black outline on top
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, floor.y);
+            ctx.lineTo(canvas.width, floor.y);
+            ctx.stroke();
+        }
+        
+        // Draw the player (circle)
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.rotation);
+            
+            // White circle with thin black outline
+            ctx.beginPath();
+            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        // Update game state
+        function update() {
+            // Rotate the player
+            player.rotation += player.rotationSpeed;
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw everything
+            drawFloor();
+            drawPlayer();
+            
+            // Update
+            update();
+            
+            // Continue loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
